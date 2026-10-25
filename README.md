@@ -64,10 +64,10 @@ DeLong and McNemar tests are used for model comparisons. Lesion localisation
 is measured with the pointing game.
 
 ## Planned structure
-configs/ experiment configurations
-data/ split definitions (no images)
-src/ preprocessing, models, training, evaluation
-scripts/ scripts that reproduce the tables and figures
+- `configs/` — experiment configurations
+- `data/` — split definitions (no images)
+- `src/` — preprocessing, models, training, evaluation
+- `scripts/` — scripts that reproduce the tables and figures
 
 
 ## Planned environment
