@@ -1,0 +1,11 @@
+torch==2.2.2
+torchvision==0.17.2
+timm==0.9.16
+opencv-python==4.9.0.80
+albumentations==1.4.8
+scikit-learn==1.4.2
+scipy==1.12.0
+pytorch-grad-cam==1.5.4
+pyyaml==6.0.1
+pandas==2.2.2
+numpy==1.26.4
