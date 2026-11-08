@@ -1,0 +1,142 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{newtxtext,newtxmath}
+\usepackage{microtype}
+\usepackage{booktabs,tabularx,threeparttable,graphicx,float,enumitem,xcolor,hyperref,amsmath}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\setlength{\parindent}{1.2em}\setlength{\parskip}{0.25em}
+\newcommand{\dr}{diabetic retinopathy}
+\newcommand{\aptos}{APTOS 2019}
+\title{Development of an Intelligent System for Early Detection of Diabetic Retinopathy Using Retinal Fundus Images}
+\author{Tamam Alhendi \and Sogdiana Marajapova}
+\date{}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Diabetic retinopathy is a major cause of avoidable visual impairment, and early lesions can be difficult to identify consistently during manual screening. This study develops and evaluates a reproducible image-based system for detecting any diabetic retinopathy in colour fundus photographs, with a longer-term design that also targets mild disease, external generalisation, and lesion localisation. The current completed experiment uses the APTOS 2019 dataset, a stratified development split, standardised image resizing, and a ResNet-50 convolutional neural network trained for binary classification of no disease versus any disease. Performance was assessed on a held-out validation set of 549 images and an internal test set of 550 images using accuracy, area under the receiver operating characteristic curve, sensitivity, specificity, predictive values, F1-score, Cohen's kappa, and the confusion matrix. On the test set, the baseline achieved 91.45\% accuracy and an area under the curve of 0.9766, with 85.51\% sensitivity and 97.75\% specificity. These results demonstrate a strong development baseline, but they do not yet establish external clinical generalisation or superiority over the proposed retinal foundation-model system. Further work should complete multi-seed training, external validation, calibration, lesion-localisation analysis, and ablation experiments.
+\end{abstract}
+\noindent\textbf{Keywords:} diabetic retinopathy; fundus photography; deep learning; ResNet-50; medical image classification; reproducibility
+
+\section{Introduction}
+\subsection{Context and motivation}
+Diabetic retinopathy (DR) is a progressive retinal complication of diabetes mellitus. It commonly begins with small vascular abnormalities and may progress to sight-threatening disease. The earliest stage may be asymptomatic, while treatment is more effective when disease is detected before irreversible visual loss. Regular retinal screening is therefore clinically important, particularly in settings where ophthalmologists and trained graders are scarce. Manual grading remains time-consuming and subject to inter-observer variation, and image quality varies substantially across cameras and clinical environments.
+
+Deep learning has shown that retinal photographs contain sufficient information for automated DR screening. Large convolutional neural networks have achieved expert-level performance for referable DR, including high area under the ROC curve on EyePACS and Messidor-2 cohorts \cite{gulshan2016,ting2017,gargeya2017}. These advances establish the feasibility of automated screening, but they do not remove the most difficult design problems: mild disease is visually subtle, class distributions are highly imbalanced, and performance can deteriorate on images from a different country, camera, or acquisition protocol.
+
+\subsection{Literature review and research gap}
+The influential work of Gulshan et al. used an ensemble of Inception-v3 networks and more than 128,000 labelled images to detect referable DR \cite{gulshan2016}. Ting et al. evaluated a system across multi-ethnic cohorts and reported high sensitivity and specificity, demonstrating the value of broad validation \cite{ting2017}. Gargeya and Leng combined learned image features with a classifier and produced visual explanations, which helped connect prediction with clinically recognisable regions \cite{gargeya2017}. Abràmoff et al. subsequently evaluated an autonomous system in primary care, showing the importance of prospective clinical assessment beyond retrospective benchmark scores \cite{abramoff2018,abramoff2013}.
+
+Several limitations remain. First, many systems optimise for referable DR rather than any DR, leaving the detection of grade 1 disease less well studied. Second, image-level models may attend to global appearance rather than small lesions, and post-hoc saliency maps do not guarantee that the highlighted region caused the prediction. Third, public datasets differ in prevalence, camera distribution, and grading protocols, so a single internal test score is not evidence of generalisation. Recent retinal foundation models and self-supervised pretraining offer a way to learn more transferable representations, while lesion-aware attention and imbalance-aware objectives may improve sensitivity to mild disease \cite{zhou2023,he2022,vaswani2017}. However, these ideas require controlled comparisons with a conventional CNN baseline and explicit external validation.
+
+The gap addressed by this study is therefore methodological as well as architectural: a reproducible pipeline is needed that reports early-detection metrics, includes quality control, evaluates explanations against lesion masks where available, and separates completed evidence from planned experiments. The project combines a ResNet-50 baseline with a proposed RETFound-based system containing lesion-aware attention, focal loss, and a quality gate. The present article reports the completed baseline experiment and specifies the full evaluation protocol for the remaining conditions.
+
+\subsection{Aim, objectives, and research questions}
+The aim is to develop a reproducible intelligent system for early detection of DR from retinal fundus images and to evaluate its diagnostic performance and generalisability.
+\begin{enumerate}[leftmargin=2em]
+\item Establish a reproducible ResNet-50 binary-classification baseline on \aptos.
+\item Compare the baseline with a retinal foundation-model system and its ablations after implementation.
+\item Quantify performance for any DR, with grade-1 recall as the key early-detection outcome.
+\item Evaluate robustness on independent datasets from different populations and cameras.
+\item Compare intrinsic lesion-aware attention with Grad-CAM using lesion annotations.
+\end{enumerate}
+These objectives form four research questions: whether the proposed system improves early detection over a CNN baseline; whether performance holds externally; whether its attention maps localise lesions better than Grad-CAM; and how much the quality gate, focal loss, and resolution contribute.
+
+\subsection{Contribution and article structure}
+The contribution is a transparent experimental framework rather than a claim of clinical readiness. It defines a binary early-detection task, a fixed split and thresholding policy, clinically interpretable metrics, external-test plans, and a versioned implementation. Section 2 reviews relevant technical foundations. Section 3 presents the materials and methods. Section 4 reports the completed baseline results and identifies experiments that remain pending. Section 5 discusses implications and limitations, followed by availability statements and references.
+
+\section{Literature Review}
+\subsection{Automated screening and clinical translation}
+Automated DR screening has progressed from handcrafted features to end-to-end neural networks. Early systems used vessel and lesion descriptors, while modern systems learn representations directly from pixels. Gulshan et al. showed that an ensemble can reach ophthalmologist-comparable performance for referable DR \cite{gulshan2016}. Ting et al. extended this direction to multiple ethnic groups and external cohorts \cite{ting2017}. These studies support the use of deep models for triage but also show that validation design is central: a model can perform well on its development distribution while failing when prevalence or acquisition changes.
+
+Clinical translation adds requirements not captured by accuracy alone. A screening system should make few dangerous false negatives, should control unnecessary referrals, and should identify ungradable images. Abràmoff et al. demonstrated that autonomous systems require prospective evaluation in the intended care pathway \cite{abramoff2018}. Accordingly, the present work treats the internal APTOS test as a development estimate and reserves external cohorts for the generalisation question.
+
+\subsection{Representation learning and attention}
+ResNet architectures provide a strong and reproducible baseline because residual connections support optimisation in deep networks \cite{he2016}. Vision transformers model image patches with self-attention and can capture long-range relationships \cite{dosovitskiy2021,vaswani2017}. RETFound applies self-supervised masked-image modelling to large collections of retinal photographs and is designed to transfer across retinal tasks \cite{zhou2023}. A foundation model is therefore a plausible backbone for subtle lesions, but it must still be evaluated against a CNN baseline under matched data splits and metrics.
+
+Attention can also support interpretability. Grad-CAM produces a post-hoc map from gradients in a target convolutional layer \cite{selvaraju2017}. Such maps are useful for inspection but are not necessarily faithful explanations. A lesion-aware head instead learns a small set of spatial queries whose attention maps are generated during the forward pass. In this project, these maps are evaluated against pixel-level lesion masks using the pointing-game score, reducing the risk that visual explanations are accepted without quantitative testing.
+
+\subsection{Class imbalance and early disease}
+The clinically important grade-1 class is usually much smaller than grade 0. A model trained only with ordinary cross-entropy can obtain high aggregate accuracy while missing subtle lesions. Focal loss reduces the contribution of easy examples and concentrates optimisation on hard cases \cite{lin2017}. The proposed multi-task objective combines focal loss for five-class grading, binary cross-entropy for any DR, and a diversity penalty that discourages multiple lesion queries from collapsing onto the same region. These choices are hypotheses to be tested, not assumptions that replace empirical comparison.
+
+\section{Materials and Methods}
+\subsection{Study design and target}
+This is a retrospective quantitative diagnostic-accuracy study. The primary target is any DR, defined as an International Clinical Diabetic Retinopathy (ICDR) grade of at least 1, versus grade 0. The completed baseline uses \aptos\ labels and does not claim to solve five-class grading. The planned system additionally predicts the five ICDR grades and referable DR (grade at least 2).
+
+\subsection{Data and splits}
+APTOS 2019 contains 3,662 labelled fundus photographs. In the completed run, the data were split into 2,563 training images, 549 validation images, and 550 internal test images. Images were resized to 224$\times$224 pixels, converted to RGB, and paired with binary labels derived from the original grade. The datasets and images are not redistributed with the code because they remain subject to their original repository terms.
+
+\begin{table}[H]\centering\small
+\caption{Completed development split and experimental role.}\label{tab:data}
+\begin{tabularx}{0.85\linewidth}{lrrX}\toprule
+Split & Images & Label & Role\\\midrule
+Train & 2,563 & ICDR $\geq 1$ & Model fitting\\
+Validation & 549 & ICDR $\geq 1$ & Development evaluation\\
+Test & 550 & ICDR $\geq 1$ & Held-out internal estimate\\\bottomrule
+\end{tabularx}\end{table}
+
+The complete protocol plans to pool EyePACS and APTOS for development, use a patient-level split where identifiers allow it, and keep near-duplicates within one split using perceptual hashing. External evaluation is planned on Messidor-2, IDRiD, and DDR. IDRiD and DDR also provide lesion masks for localisation analysis; their masks are not used to train the image classifier.
+
+\subsection{Baseline model and preprocessing}
+The completed baseline is a ResNet-50 classifier with two output logits. The model is initialised without a pretrained checkpoint in the recorded Kaggle run and is optimised with cross-entropy. The input pipeline uses resizing and RGB conversion; the model outputs a probability for any DR through a softmax layer. A threshold of 0.5 is used for the reported confusion-matrix metrics. This threshold is convenient for the baseline; the full protocol will select the highest validation threshold achieving sensitivity of at least 0.90 and then freeze it before testing.
+
+The proposed extension contains four stages: a quality gate, retinal preprocessing, a RETFound ViT-Large encoder, and a lesion-aware multi-task head. Eight learnable lesion queries attend to patch tokens. Their attention maps are reshaped to the patch grid and upsampled as intrinsic heatmaps. The planned loss is $L=L_{focal}+\lambda_1L_{BCE}+\lambda_2L_{div}$, with focal parameter $\gamma=2$, $\lambda_1=1$, and $\lambda_2=0.1$.
+
+\subsection{Evaluation metrics}
+For binary detection, sensitivity and specificity are calculated as
+\begin{equation} \mathrm{Se}=\frac{TP}{TP+FN},\qquad \mathrm{Sp}=\frac{TN}{TN+FP}. \end{equation}
+We report accuracy, ROC AUC, sensitivity, specificity, positive and negative predictive values, F1-score, macro-F1, Cohen's kappa, and the confusion matrix. The completed results use point estimates; the full study will add patient-level bootstrap 95\% confidence intervals, DeLong tests for paired AUCs, and McNemar tests at $\alpha=0.05$. Five-class grading will use quadratic weighted kappa and per-grade recall. Localisation will use the pointing-game score, where a hit occurs if the maximum heatmap response falls within an annotated lesion.
+
+\subsection{Reproducibility and implementation}
+The implementation is written in Python and uses PyTorch, torchvision, timm, Pillow, scikit-learn, SciPy, OpenCV, Albumentations, and pytorch-grad-cam. Experiments were run in a Kaggle Notebook with a Tesla T4 GPU. The repository contains the configuration, split files, training script, evaluation script, and environment specification. Random seeds, data paths, and output filenames are recorded in the project structure.
+
+\section{Results}
+\subsection{Completed baseline experiment}
+The baseline was trained for one recorded epoch as an initial development experiment. Validation inference covered all 549 validation images. The resulting accuracy was 0.9053 and ROC AUC was 0.9621. The held-out internal test evaluation covered all 550 images and produced the metrics in Table~\ref{tab:results}.
+
+\begin{table}[H]\centering\small
+\caption{ResNet-50 baseline on the held-out APTOS internal test set.}\label{tab:results}
+\begin{tabular}{lr}\toprule
+Metric & Value\\\midrule
+N & 550\\
+Accuracy & 0.9145\\
+ROC AUC & 0.9766\\
+Sensitivity & 0.8551\\
+Specificity & 0.9775\\
+PPV & 0.9758\\
+NPV & 0.8642\\
+F1-score & 0.9115\\
+Macro-F1 & 0.9144\\
+Cohen's kappa & 0.8296\\\bottomrule
+\end{tabular}\end{table}
+
+The test confusion matrix was TN=261, FP=6, FN=41, and TP=242. The high specificity and PPV indicate that the baseline generated few false referrals at the chosen threshold. Sensitivity was lower than the 0.90 target specified for the final protocol, so the result should not be interpreted as meeting the planned screening criterion. The validation metrics were similar: accuracy 0.9053, AUC 0.9621, sensitivity 0.8432, specificity 0.9733, PPV 0.9719, NPV 0.8500, and F1-score 0.9030.
+
+\subsection{Interpretation and pending analyses}
+The completed numbers support the feasibility of binary DR detection on the APTOS development distribution. They do not answer whether the proposed lesion-aware RETFound system is better than ResNet-50, whether grade-1 recall improves, or whether performance transfers across countries and cameras. The multi-seed comparison, external tests, calibration, confidence intervals, statistical tests, quality-gate analysis, and pointing-game comparison remain to be completed. Reporting these items as pending is essential because the research design explicitly distinguishes hypotheses from observations.
+
+\section{Discussion}
+The baseline demonstrates that a compact, reproducible image classifier can separate no DR from any DR with a high AUC on an internal held-out split. This is consistent with prior evidence that fundus photographs contain strong predictive signal for DR \cite{gulshan2016,ting2017}. The result is useful as a reference point for the proposed system: later architectural changes can be judged against a fixed split, preprocessing pipeline, threshold policy, and metrics.
+
+The clinically relevant trade-off is visible in the confusion matrix. Only six negatives were classified as positive, but 41 positive cases were missed. For a screening application, the false-negative count deserves particular attention, especially when mild lesions are under-represented or labels are noisy. A threshold selected for sensitivity rather than convenience may change the specificity and predictive values. This is why the final protocol fixes the threshold on validation data and evaluates the test set only once.
+
+The study also illustrates why internal performance is insufficient. APTOS is a useful development dataset, but models can exploit acquisition characteristics or prevalence patterns. Messidor-2, IDRiD, and DDR provide complementary populations, cameras, grading standards, and lesion annotations. External results will determine whether the system is robust or merely well fitted to its development distribution.
+
+\section{Conclusion}
+This study established a reproducible baseline for early DR detection from retinal fundus photographs and defined a complete protocol for a stronger lesion-aware system. On the 550-image APTOS internal test set, the one-epoch ResNet-50 baseline achieved 0.9145 accuracy and 0.9766 ROC AUC, with 0.8551 sensitivity and 0.9775 specificity. These findings answer the first development objective by confirming that the binary task is technically feasible, but they do not yet demonstrate the superiority or generalisability of the proposed system.
+
+The practical significance is that the project now has a traceable reference implementation and an auditable evaluation target. Its limitations are the short training budget, single dataset, internal test distribution, lack of external validation, absence of confidence intervals and statistical comparisons, and incomplete analysis of grade 1, lesion localisation, and ablations. Future work should complete multi-seed training, train the RETFound-based model, evaluate the quality gate, report external datasets, quantify calibration, and compare intrinsic attention with Grad-CAM. Until those experiments are complete, the model should be considered a research baseline rather than a clinical diagnostic tool.
+
+\section*{Data Availability}
+The primary data are from the publicly distributed APTOS 2019 Blindness Detection dataset hosted on Kaggle at \url{https://www.kaggle.com/competitions/aptos2019-blindness-detection}. The dataset must be obtained directly from Kaggle under the competition's terms; the retinal images are not included in this repository. The planned external datasets are Messidor-2, IDRiD, and DDR, each accessed from its respective official source and licence. The exact split CSV files used in the completed baseline are included with the code repository.
+
+\section*{Code Availability}
+All project code for preprocessing, splitting, baseline training, and evaluation is available in the GitHub repository \url{https://github.com/sagdiko/dr-early-detection}. The current reproducible version is the local commit \texttt{37e74f7}; the repository is released under the MIT licence. The implementation uses Python, PyTorch, torchvision, timm, Pillow, scikit-learn, SciPy, OpenCV, Albumentations, and pytorch-grad-cam; pinned dependencies are listed in \texttt{requirements.txt}. The completed Kaggle notebook used for the GPU experiment is available at \url{https://www.kaggle.com/code/sogdianamarajapova/notebookafe840f455}.
+
+\section*{Acknowledgements}
+The authors thank the maintainers of the APTOS dataset and the open-source machine-learning libraries used in this work.\par
+\textbf{AI-use disclosure.} Generative AI assistance was used for organising supplied project materials, drafting reproducibility-oriented text, and checking formatting. The authors remain responsible for verifying all scientific claims, results, citations, and final submission content.
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+\end{document}
