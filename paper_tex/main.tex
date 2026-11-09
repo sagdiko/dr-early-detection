@@ -1,0 +1,241 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,microtype,amsmath,amssymb,graphicx,booktabs,array,multirow,caption,xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage[numbers,sort&compress]{natbib}
+\captionsetup{font=small,labelfont=bf}
+\setlength{\parskip}{0pt}
+\linespread{1.0}
+\title{\vspace{-1.2cm}\textbf{Development of an Intelligent System for Early Detection of Diabetic Retinopathy Using Retinal Images}}
+\author{Tamam Alhendi and Sogdiana Marajapova}
+\date{}
+\begin{document}
+\maketitle
+\vspace{-0.9cm}
+\begin{abstract}
+\noindent Diabetic retinopathy is a leading cause of preventable vision loss, and automated screening usually ignores its earliest, microaneurysm-only stage. This study aimed to build a lesion-aware deep learning system for detecting any diabetic retinopathy, with attention to the mild stage, and to audit the public data used to evaluate such systems. Four public datasets were audited for duplicates, conflicting grades, image quality and lesion size. A quality gate and a classifier with learnable lesion queries and a class-weighted focal loss were built on a partially fine-tuned EfficientNet-B0, developed on 11,998 EyePACS images, and compared with a global-pooling baseline on an internal test set and on three external sets, with bootstrap confidence intervals. The audit found 148 duplicate pairs in APTOS, 43 with different grades, and a duplicate crossing the official IDRiD train/test split; half of all microaneurysms were narrower than one pixel at a 224-pixel input, and 61% of proliferative images were labelled ungradable. The proposed system reached sensitivities of 0.91 to 0.98 and detected 84% to 91% of mild cases, significantly more than the baseline on two sets, but its specificity was 0.10 to 0.21 lower and its area under the curve slightly lower. Neither the attention maps nor Grad-CAM located lesions better than chance. Early detection is limited more by input resolution and data quality than by the classifier head, and quality rejection must trigger referral rather than a negative result.
+
+\medskip\noindent\textbf{Keywords:} diabetic retinopathy; early detection; deep learning; external validation; dataset audit; explainability
+\end{abstract}
+\section{Introduction}
+Diabetes affects about 589 million adults worldwide, a number projected to reach 853 million by 2050, and more than four in ten people with diabetes are undiagnosed \cite{idf2025}. About one in five people with diabetes has diabetic retinopathy (DR), and the number of adults with DR is expected to rise from 103 million in 2020 to 160 million in 2045 \cite{teo2021}. On the International Clinical Diabetic Retinopathy (ICDR) scale, the disease runs from no DR (grade~0) through mild, moderate and severe non-proliferative DR (NPDR, grades~1--3) to proliferative DR (PDR, grade~4) \cite{wilkinson2003}. Grade~1 is defined by microaneurysms (MA) alone; it causes no symptoms, but it is the stage at which control of glycaemia and blood pressure is most useful. Annual fundus photography can find it, yet specialist graders are scarce exactly where the number of patients grows fastest \cite{idf2025}.
+
+Deep learning (DL) has changed this picture. Convolutional networks trained on large graded collections reached specialist-level accuracy for referable DR \cite{gulshan2016,ting2017}, autonomous systems passed prospective pivotal trials \cite{abramoff2018,ipp2021}, and a system integrated into the national screening programme of Thailand reached a sensitivity of 91.4\% and a specificity of 95.4\% for vision-threatening DR in real time \cite{ruamviboonsuk2022}. The evidence also shows three weaknesses. First, almost all deployed systems target referable or vision-threatening DR, so mild NPDR is deliberately treated as negative \cite{gulshan2016,ipp2021,ruamviboonsuk2022}. Second, performance varies widely between products and sites \cite{lee2021,wang2026}, the reference standard itself is noisy at the boundary between grades~0 and~1 \cite{krause2018}, and pooled analyses report a positive predictive value of only about one half at realistic prevalence \cite{wewetzer2021}. Third, results obtained on public benchmarks can be inflated by methodological faults such as data leakage between training and test data \cite{kapoor2023} and by dataset bias and evaluation on data from the same source \cite{varoquaux2022}. Reporting guidance for prediction models therefore asks for a clear description of data sources, exclusions, and external validation \cite{collins2024}.
+
+For early detection these weaknesses meet in a specific way. The decisive lesion, the microaneurysm, is a few pixels wide in the native photograph, but most models downsample the image to 224--512 pixels; the extent to which early signs survive this step is rarely quantified. Image-quality control is recommended \cite{dai2021,ruamviboonsuk2022}, but whether rejecting poor images interacts with disease severity is rarely reported. Explanations are usually shown as heatmaps, but they are seldom compared with pixel-level lesion annotations \cite{sayres2019}. Finally, the public datasets on which most models are trained and compared are seldom audited for duplicated images and conflicting labels.
+
+The aim of this study is to develop and externally evaluate a lesion-aware DL system for the detection of any DR (grade~$\geq$1), with explicit attention to grade~1, and to audit the public data on which such systems rely. To this end, four public datasets are first audited for duplicates, label conflicts, acquisition shift, image quality and lesion size; a system with a quality gate, a lesion-query attention head and an imbalance-aware loss is then implemented; and it is compared with a conventional baseline on internal and external data with confidence intervals. The study therefore asks whether such a system detects any DR, and grade~1 in particular, more accurately than a global-pooling CNN baseline, and whether this advantage holds on data from other populations and cameras. It further asks whether attention maps that are built into the model point to annotated lesions more often than post-hoc Grad-CAM maps, and what the quality gate and the imbalance-aware loss contribute, given the limit that input resolution places on the visibility of early lesions.
+
+Compared with the cited work, the study (i) reports a data audit that found duplicated images with conflicting grades in two public test sets, including one pair that crosses the official IDRiD train/test split, and measures how small microaneurysms become at typical input resolutions; (ii) shows that image-quality rejection is strongly associated with severe disease, a safety issue that is not discussed in screening studies; (iii) evaluates heatmaps quantitatively against pixel masks with a chance baseline; and (iv) releases the code and split definitions. The work was run on a CPU-only budget, so it is a reduced-scale implementation of the protocol whose negative results are reported as such.
+
+The rest of the article is organised as follows. Section~\ref{sec:lr} reviews the literature and appraises each key study; Section~\ref{sec:mm} describes data, system and statistics; Section~\ref{sec:res} reports the data audit and the experimental results; Section~\ref{sec:conc} concludes, followed by the data and code availability statements.
+
+\section{Literature Review}\label{sec:lr}
+The review is organised by the role each study plays for this work; Table~\ref{tab:lr} gives the strengths, weaknesses and contribution of every key study. Four studies older than five years are retained deliberately: Gulshan et al.\ \cite{gulshan2016} and Ting et al.\ \cite{ting2017} are the original validations against which all later systems are compared, Abr\`amoff et al.\ \cite{abramoff2018} is the first prospective trial that led to regulatory authorisation, and Sayres et al.\ \cite{sayres2019} is still the only randomised reader study of heatmap assistance for DR. No newer work replaces these roles; all other review sources date from 2021 or later, and no conference papers are used in this section.
+
+\textbf{Screening systems and their limits.} The landmark studies \cite{gulshan2016,ting2017} established expert-level detection of referable DR on large internal and multi-ethnic external data, and the pivotal trial of Abr\`amoff et al.\ \cite{abramoff2018} moved autonomous screening into primary care. All three, however, optimise the referable threshold and return a single image-level label. Lee et al.\ \cite{lee2021} then showed that seven commercial algorithms differed widely in sensitivity on the same 311{,}604 images, and the meta-analyses of Wewetzer et al.\ \cite{wewetzer2021} and Wang et al.\ \cite{wang2026} confirm high pooled accuracy but a low positive predictive value and few fully external validations. For this study they define the target operating point (sensitivity and specificity of about 0.90) and the requirement of external testing.
+
+\textbf{Lesion-aware and quality-aware models.} DeepDR \cite{dai2021} combines quality assessment, lesion segmentation and grading and detects mild NPDR, but it needs lesion masks for about 15{,}000 images. CABNet \cite{he2021} adds category and global attention blocks so that every grade receives its own discriminative feature channels, which counters class imbalance without lesion masks, and CRA-Net \cite{ma2024} adds a transformer-guided lesion-relation attention evaluated on DDR and APTOS. These journal studies motivate the weakly supervised, attention-based head used here; their limitation is that attention maps were judged visually rather than against masks. The foundation models RETFound \cite{zhou2023} and DeepDR Plus \cite{dai2024} show that self-supervised pretraining on hundreds of thousands of fundus photographs improves label efficiency and allows progression prediction, but they require compute and data far beyond a student project.
+
+\textbf{Surveys and explainability.} Recent surveys \cite{tsiknakis2021,bhulakshmi2024} agree that public datasets carry only image-level grades, that classes are strongly imbalanced, and that early disease and lesion localisation remain open problems; multimodal models are expected to help when clinical data are available \cite{qin2026}. The reader study of Sayres et al.\ \cite{sayres2019} showed that heatmaps can even reduce accuracy for patients without DR, which is why localisation must be measured, not assumed.
+
+\textbf{Gap.} No reviewed study (a) targets grade~1 explicitly while auditing the data used for evaluation, (b) quantifies how many microaneurysms remain visible at the input resolution, or (c) tests attention maps against lesion masks with a chance baseline. This study addresses these gaps.
+
+\begin{table}[t]
+\centering\scriptsize
+\caption{Critical appraisal of the key studies (ordered as in the text).}\label{tab:lr}
+\begin{tabular}{@{}p{1.9cm}p{3.4cm}p{3.4cm}p{3.4cm}p{2.9cm}@{}}
+\toprule
+Study & Design and data & Strengths & Weaknesses & Contribution here\\\midrule
+Gulshan 2016 \cite{gulshan2016} & Inception-v3 ensemble, $>$128k images; EyePACS-1, Messidor-2 & First expert-level referable-DR result; two validation sets & Referable DR only; image-level output; internal-like data & Baseline concept and performance reference\\
+Ting 2017 \cite{ting2017} & 76k images, 10 multi-ethnic external cohorts & Broad external validation & Referable DR; deployment untested & Requirement of external testing\\
+Abr\`amoff 2018 \cite{abramoff2018} & Prospective trial, 900 patients, 10 sites & Pre-specified endpoints; regulatory approval & More-than-mild DR; one product & Target sensitivity and specificity\\
+Lee 2021 \cite{lee2021} & 7 algorithms, 311k images, veterans & Head-to-head real-world test & No lesion-level analysis & Expect performance drop externally\\
+Dai 2021 \cite{dai2021} & DeepDR: quality + lesion + grading, $\sim$0.5M images & Detects mild NPDR; real-time quality control & Needs $\sim$15k lesion masks & Quality gate design\\
+He 2021 \cite{he2021} & CABNet attention blocks on 3 datasets & Handles imbalance; few parameters & Maps judged visually & Attention-based head\\
+Ma 2024 \cite{ma2024} & CRA-Net, DDR and APTOS & Models lesion relations & No external test; no mask evaluation & Lesion-relation attention\\
+Zhou 2023 \cite{zhou2023} & RETFound, 904k CFP, self-supervised & Label-efficient, generalises & Very high compute; EyePACS in pretraining & Future backbone; overlap check\\
+Dai 2024 \cite{dai2024} & DeepDR Plus, progression in 5 years & Personalised screening intervals & Chinese data only & Motivation for early detection\\
+Sayres 2019 \cite{sayres2019} & Randomised reader study, 10 graders & Measures effect of explanations & One heatmap method & Heatmaps must be validated\\
+Wewetzer 2021 \cite{wewetzer2021}; Wang 2026 \cite{wang2026} & Meta-analyses, primary care / approved devices & Pooled accuracy; sources of heterogeneity & Heterogeneous reference standards & PPV at $\pi=0.10$; external data\\
+Tsiknakis 2021 \cite{tsiknakis2021}; Bhulakshmi 2024 \cite{bhulakshmi2024} & Surveys of DL for DR & Datasets, metrics, open problems & Mostly descriptive & Imbalance-aware loss; per-grade metrics\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Materials and Methods}\label{sec:mm}
+\subsection{Design and deviations from the protocol}
+The study is a retrospective diagnostic-accuracy study reported along TRIPOD+AI \cite{collins2024}: a system is developed on one source and evaluated against a reference standard on a held-out internal set and on external sets from other countries. The primary task is any DR (grade~$\geq$1 vs.\ grade~0); five-class grading is secondary. Compared with the planned protocol, six deviations were necessary and are stated here. (1) The RETFound weights could not be obtained in the computing environment and a ViT-Large cannot be fine-tuned on the available CPU, so the proposed head was implemented on an ImageNet EfficientNet-B0 \cite{tan2019} and the foundation-model baseline was dropped. (2) Messidor-2 and the graded part of DDR could not be downloaded; DDR is represented by its 757 lesion-annotated images. (3) APTOS~2019 has no patient identifiers, so a patient-level split is impossible; it was moved from the development pool to external testing, where the split problem does not arise. (4) Development used a random subset of 6{,}000 EyePACS patients. (5) The optional clinical branch was removed because no dataset contains clinical variables. (6) Because of the computing time available, each condition was trained once (seed~0, 5 epochs) instead of with several seeds, and the plain cross-entropy (A2) and 448-pixel (A3) ablations were not run; uncertainty is expressed through bootstrap confidence intervals, and the effect of resolution is analysed through the lesion-size audit.
+
+\textbf{Overlap with foundation-model pretraining.} RETFound was pretrained on 904{,}170 colour fundus photographs, 90.2\% from the Moorfields MEH-MIDAS dataset and 9.8\% from Kaggle EyePACS \cite{zhou2023}; APTOS, IDRiD and Messidor-2 were only its downstream evaluation sets. The external sets of this study are therefore not part of that pretraining corpus, whereas EyePACS is; any future RETFound-based version must not report EyePACS internal results as unseen data.
+
+\subsection{Data}
+Five public, de-identified sources were used (Table~\ref{tab:data}). \emph{EyePACS} \cite{cuadros2009} (USA; Kaggle 2015 training release, 35{,}126 graded images of 17{,}563 patients) provided the development data: 6{,}000 patients were drawn at random (seed~0), and their 12{,}000 images were split by patient 70/15/15 into training, validation and internal test sets. \emph{EyeQ} \cite{fu2019} provides good/usable/reject quality labels for 12{,}543 EyePACS training images; only labels of training-split patients were used to train the quality gate. \emph{APTOS~2019} \cite{aptos2019} (India, several cameras, 3{,}662 images) and \emph{IDRiD} \cite{porwal2018} (India, Kowa VX-10$\alpha$, 516 images, official train and test parts pooled) are external test sets with ICDR grades. \emph{DDR} \cite{li2019} (China) contributes 757 images with pixel masks of microaneurysms (MA), haemorrhages (HE), hard exudates (EX) and soft exudates (SE); all contain lesions, so DDR measures sensitivity and lesion localisation.
+
+\textbf{Preprocessing and audit.} Every image was cropped to its circular field of view (FOV; pixels with maximal channel value $>$20), padded to a square, resized to 512 pixels, and described by its mean brightness, RMS contrast and sharpness (variance of the Laplacian) inside the FOV. Near-duplicates were searched with a 255-bit perceptual hash of the high-pass filtered green channel, which encodes the vessel pattern. The distribution of nearest-neighbour Hamming distances was clearly bimodal (all duplicate pairs at $\leq$10 bits, the next pair at 13 bits and the bulk at 20--90 bits), so pairs at $\leq$10 bits were treated as duplicates; visual inspection confirmed them. In external sets, one copy of a duplicate group was kept when all grades agreed and the whole group was excluded when they conflicted. In EyePACS, duplicates and both eyes of a patient were assigned to the same split. MA, HE, EX and SE masks of DDR were split into connected components, and each component's equivalent diameter was rescaled to the 224- and 448-pixel model inputs.
+
+\subsection{Proposed system and baseline}
+\textbf{Quality gate.} An EfficientNet-B0 with the partial fine-tuning described below and a three-class head was trained on EyeQ labels (3{,}004 images). Images classified as \emph{reject} are not graded but returned for re-capture or referral.
+
+\textbf{Backbone.} The image is resized to $224\times224$ pixels and normalised with ImageNet statistics. Stages 1--6 of an ImageNet-pretrained EfficientNet-B0 \cite{tan2019} are frozen and their output ($192\times7\times7$) is cached; stage~7 and the $1\times1$ convolutional head (1{,}280 channels) are fine-tuned. This choice keeps training feasible on two CPU cores; random horizontal and vertical flips of the cached feature maps serve as augmentation.
+
+\textbf{Lesion-aware head.} The $N=49$ feature vectors $X\in\mathbb{R}^{N\times d}$ ($d=1280$) are layer-normalised, and $Q=8$ learnable lesion queries $P\in\mathbb{R}^{Q\times d_k}$ ($d_k=256$) attend to them:
+\begin{equation}
+A=\mathrm{softmax}\!\left(\frac{P\,(XW_K)^{\top}}{\sqrt{d_k}}\right)\in\mathbb{R}^{Q\times N},\qquad F=A\,XW_V .
+\end{equation}
+Each row of $A$ is a spatial map; the maximum over queries is the lesion heatmap, which is produced in the forward pass and is therefore intrinsic. The query features are averaged and passed to a five-grade head and an any-DR head. The loss is $L=L_{\mathrm{focal}}+L_{\mathrm{BCE}}+0.1\,L_{\mathrm{div}}$, where the focal loss \cite{lin2020} of the grade head uses $\gamma=2$ and class weights inversely proportional to class frequency, $L_{\mathrm{BCE}}$ is the binary cross-entropy of the any-DR head, and $L_{\mathrm{div}}$ is the mean pairwise cosine similarity of the query maps, which keeps the queries apart.
+
+\textbf{Conditions.} \emph{B1} (baseline) uses the same trainable backbone with global average pooling, dropout and a five-class cross-entropy head; its any-DR score is $1-p(\text{grade }0)$, and its heatmaps are Grad-CAM maps \cite{selvaraju2020} of this score. \emph{P} is the proposed system with the quality gate. \emph{A1} is P without the gate (all images graded).
+
+\textbf{Training.} AdamW, one-cycle schedule with peak learning rates $3\times10^{-4}$ (backbone) and $10^{-3}$ (head), weight decay 0.05, batch 64, 5 epochs, seed 0. The checkpoint with the best validation quadratic weighted kappa is kept. The any-DR threshold is the highest threshold reaching a validation sensitivity of 0.90; it is fixed before any test set is used.
+
+\subsection{Evaluation and statistics}
+Sensitivity (Se) and specificity (Sp) for any DR at the fixed threshold, the area under the ROC curve (AUC), the positive predictive value at a prevalence of $\pi=0.10$, $\mathrm{PPV}_{0.10}=\mathrm{Se}\,\pi/(\mathrm{Se}\,\pi+(1-\mathrm{Sp})(1-\pi))$, the quadratic weighted kappa $\kappa_w$, the macro-F1 score and grade-1 recall (share of grade-1 images flagged as DR) were computed. 95\% confidence intervals (CI) come from 1{,}000 bootstrap resamples, drawn by patient in EyePACS and by image elsewhere \cite{efron1993}. Paired AUCs were compared with the DeLong test \cite{delong1988}, and sensitivities and specificities with the exact McNemar test; for all other differences the paired bootstrap CI is reported. Localisation is measured with the pointing game \cite{zhang2018}: a hit is scored when the maximum of the upsampled heatmap lies within one 16-pixel patch (at 224 pixels) of an annotated lesion. Because large lesions cover much of some images, the expected hit rate of a random point inside the FOV is reported as a chance baseline. Success criteria fixed in the protocol were: external Se $\geq0.90$ with Sp close to 0.90; grade-1 recall of P significantly above B1; $\kappa_w\geq0.80$; and a pointing-game score of P above Grad-CAM.
+\section{Results}\label{sec:res}
+\subsection{Data audit}
+Table~\ref{tab:data} lists the data and exclusions, and Fig.~\ref{fig:ex} shows examples of each stage of the disease. The audit produced four findings that change how results on these datasets must be read.
+
+\begin{table}[t]
+\centering\scriptsize\setlength{\tabcolsep}{3pt}
+\caption{Data used in the experiments. Distr.: images in the release; Analysed: after exclusions; Any DR and G1: share of grade~$\geq$1 and grade~1 among analysed images. Duplicates: pairs at $\leq$10 bits of the vessel hash (pairs with conflicting grades).}\label{tab:data}
+\begin{tabular}{@{}llrlrrrl@{}}
+\toprule
+Dataset & Origin, camera & Distr. & Excluded (reason) & Analysed & Any DR & G1 & Role\\\midrule
+EyePACS subset \cite{cuadros2009} & USA, various & 12{,}000 & 2 (no detectable FOV) & 11{,}998 & 26.5\% & 7.0\% & Development\\
+\quad train / val / test & \multicolumn{3}{l}{4{,}200 / 900 / 900 patients, split by patient} & \multicolumn{3}{l}{8{,}398 / 1{,}800 / 1{,}800} & \\
+EyeQ labels \cite{fu2019} & USA (EyePACS) & 12{,}543 & non-training patients & 3{,}004 & -- & -- & Quality gate\\
+APTOS 2019 \cite{aptos2019} & India, various & 3{,}662 & 176 (148 dup.\ pairs, 43 conflicting) & 3{,}486 & 48.5\% & 9.7\% & External test\\
+IDRiD \cite{porwal2018} & India, Kowa & 516 & 9 (6 dup.\ pairs, 3 conflicting) & 507 & 67.1\% & 4.5\% & External test\\
+DDR lesion set \cite{li2019} & China, various & 757 & 0 & 757 & 100\% & -- & Sensitivity, lesions\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering\includegraphics[width=\textwidth]{../figs/fig1_examples.pdf}
+\caption{Fundus photographs from IDRiD (CC BY 4.0) at the four main ICDR stages (a--d) and a DDR crop with annotated microaneurysms (e) together with the same crop at the resolution of a 224-pixel model input (f), where the 300-pixel crop occupies about 19 pixels and the microaneurysms are no longer visible.}\label{fig:ex}
+\end{figure}
+
+\begin{figure}[t]
+\centering\includegraphics[width=\textwidth]{../figs/fig2_data.pdf}
+\caption{Data audit. (a) Grade distributions; numbers give the grade-1 share. (b) RMS contrast inside the field of view differs between sources (Kruskal--Wallis $H=3407$, $p<0.001$). (c) Equivalent diameter of the 10{,}380 annotated DDR microaneurysms after resizing to the model input; dashed line: 1 pixel. (d) EyeQ quality labels of 12{,}543 EyePACS images by DR grade ($\chi^2=500$, $p<10^{-100}$).}\label{fig:data}
+\end{figure}
+
+\emph{Duplicates with conflicting labels.} APTOS contains 148 duplicate pairs, 140 of them pixel-identical after preprocessing, and 43 of these pairs carry different grades. IDRiD contains 6 duplicate pairs, 3 with different grades; one pair crosses the official train/test split and is graded 0 in the training part and 3 in the test part. No duplicates were found between datasets. Without this audit, a model trained on the official IDRiD training part would be tested on an image it had seen, and the conflicting pairs would cap the attainable accuracy.
+
+\emph{Acquisition shift.} Brightness, contrast and sharpness differ between all sources (Fig.~\ref{fig:data}b); the median contrast is 23.5 grey levels in EyePACS but 15.1 in APTOS, which is the expected direction of a domain shift for a model developed on EyePACS. Prevalence also differs strongly (any DR 26.5\% to 67.1\%, grade~1 4.5\% to 9.7\%), so prevalence-dependent metrics are reported at a common $\pi=0.10$.
+
+\emph{Microaneurysms vanish at standard resolution.} The median MA in DDR is 7.8 pixels wide in the native image but 1.0 pixel at a 224-pixel input; 49\% of all MAs fall below one pixel and 94\% below two pixels (Fig.~\ref{fig:data}c, Fig.~\ref{fig:ex}f). At 448 pixels only 9\% fall below one pixel. Grade~1, which is defined by MAs alone, is therefore close to invisible to any model at 224 pixels, whatever its head.
+
+\emph{Quality rejection depends on severity.} In EyeQ, 16.7\% of grade-0 images but 61.4\% of PDR images are labelled \emph{reject} (Fig.~\ref{fig:data}d). A quality gate that excludes rejected images from grading therefore removes the most severe cases disproportionately; in a screening pathway these images must be referred, never reported as negative.
+\subsection{Detection of any DR and of grade 1 on internal and external data}
+Table~\ref{tab:main} gives the main results and Fig.~\ref{fig:roc} the ROC curves. At the threshold fixed on validation data, the proposed system P reached a sensitivity of 0.909 on the internal test set and 0.965--0.976 on the three external sets, and it flagged 84--91\% of grade-1 images, compared with 71--85\% for the baseline B1. The grade-1 gain was significant on the internal set (+0.102, 95\% CI 0.023 to 0.188) and on APTOS (+0.063, 0.018 to 0.108) and borderline on IDRiD, where only 23 grade-1 images remain (+0.130, 0.000 to 0.278). The gain was not free: specificity of P was 0.10--0.21 lower than that of B1 on every set (all McNemar $p<0.001$), and its AUC was 0.017--0.026 lower (DeLong $p=0.086$ internally, $p<0.003$ on APTOS and IDRiD). P therefore did not discriminate better than B1; it moved to a more sensitive operating point. Grading agreement was moderate ($\kappa_w$ 0.39--0.73) and did not differ significantly between the models.
+
+Performance was higher on the external sets than internally (AUC 0.87--0.92 vs.\ 0.71--0.73). This does not indicate better generalisation: the external sets contain far more moderate and severe disease (Table~\ref{tab:data}), whereas the EyePACS internal set is dominated by the noisy grade~0/1 boundary \cite{krause2018}. Specificity, however, fell sharply on external data for both models, and the PPV at $\pi=0.10$ was only 0.12--0.16, well below the value of about one half reported for deployed systems \cite{wewetzer2021}. Measured against the targets set in advance, the system thus achieved the required sensitivity but not a specificity close to 0.90 or a $\kappa_w$ of 0.80, and its advantage for grade~1 was real on two of three sets but was bought with specificity rather than with better discrimination.
+
+\begin{table}[t]
+\centering\scriptsize
+\caption{Main results at the threshold fixed on validation data (validation Se $\geq$ 0.90), with 95\% bootstrap CIs. P is evaluated on images accepted by the quality gate ($n$), B1 on all analysed images. $\Delta$: paired difference P$-$B1 on images graded by both, with 95\% CI; bold: CI excludes zero.}\label{tab:main}
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}llrcccccc@{}}
+\toprule
+Test set & Model & $n$ & AUC & Se & Sp & PPV$_{0.10}$ & G1 recall & $\kappa_w$\\\midrule
+\multirow{3}{*}{EyePACS (int.)} & B1 & 1{,}800 & 0.731 (0.694--0.766) & 0.857 & 0.324 & 0.123 & 0.713 (0.61--0.80) & 0.426\\
+ & P & 1{,}527 & 0.714 (0.676--0.749) & 0.909 & 0.223 & 0.115 & 0.837 (0.75--0.90) & 0.388\\
+ & $\Delta$ & & $-$0.019 & \textbf{+0.054} & \textbf{$-$0.097} & & \textbf{+0.102} & $-$0.047\\\midrule
+\multirow{3}{*}{APTOS (ext.)} & B1 & 3{,}486 & 0.889 (0.877--0.900) & 0.949 & 0.348 & 0.139 & 0.852 (0.81--0.89) & 0.635\\
+ & P & 3{,}066 & 0.869 (0.856--0.883) & 0.965 & 0.180 & 0.116 & 0.904 (0.87--0.94) & 0.652\\
+ & $\Delta$ & & \textbf{$-$0.017} & \textbf{+0.021} & \textbf{$-$0.162} & & \textbf{+0.063} & $-$0.025\\\midrule
+\multirow{3}{*}{IDRiD (ext.)} & B1 & 507 & 0.922 (0.898--0.944) & 0.953 & 0.449 & 0.161 & 0.783 (0.60--0.95) & 0.713\\
+ & P & 474 & 0.894 (0.867--0.920) & 0.971 & 0.238 & 0.124 & 0.913 (0.79--1.00) & 0.732\\
+ & $\Delta$ & & \textbf{$-$0.026} & +0.019 & \textbf{$-$0.213} & & +0.130 & +0.027\\\midrule
+DDR (ext.) & B1 / P & 757 / 712 & -- & 0.960 / 0.976 & -- & -- & -- & --\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering\includegraphics[width=\textwidth]{../figs/fig3_roc.pdf}
+\caption{ROC curves for any DR. Dots: operating points at the validation-fixed threshold; shaded square: target region (Se $\geq$ 0.90, Sp $\geq$ 0.90).}\label{fig:roc}
+\end{figure}
+
+\subsection{Lesion localisation}
+On the 757 DDR images, the maximum of the attention map of P fell within one patch of an annotated lesion in 23.0\% of images (95\% CI 19.9--25.9\%) and the maximum of the Grad-CAM map of B1 in 21.9\% (19.0--25.0\%); the paired difference was +1.1 points ($-$2.8 to +4.9). For microaneurysms (570 images) the scores were 12.3\% and 13.5\%. Both are \emph{below} the chance baseline of a random point inside the field of view (34.3\% for all lesions, 19.6\% for MAs). Inspection (Fig.~\ref{fig:heat}) shows that both maps peak most often on the optic disc or on large bright regions. The built-in attention therefore offered no localisation advantage over Grad-CAM, and neither map should be shown to graders as a lesion explanation.
+
+\begin{figure}[t]
+\centering\includegraphics[width=0.72\textwidth]{../figs/fig4_heatmaps.pdf}
+\caption{DDR test images with lesion masks (outlines), Grad-CAM of B1 and the lesion attention of P (maximum over queries). Crosses mark the map maximum used in the pointing game.}\label{fig:heat}
+\end{figure}
+
+\subsection{Quality gate, loss and resolution}
+\begin{table}[t]
+\centering\scriptsize
+\caption{Quality gate and component analysis (seed 0). Rejection: share of analysed images classified as \emph{reject}. A1: P without gate (all images); $\Delta$AUC and $\Delta$G1: difference to B1 on all images with 95\% CI.}\label{tab:abl}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+ & EyePACS (int.) & APTOS & IDRiD & DDR\\\midrule
+Gate rejection rate & 15.2\% & 12.0\% & 6.5\% & 5.9\%\\
+A1: AUC / Se / Sp & 0.715 / 0.904 / 0.228 & 0.863 / 0.962 / 0.185 & 0.899 / 0.971 / 0.234 & -- / 0.978 / --\\
+A1 vs B1: $\Delta$AUC & $-$0.016 ($-$0.035, 0.005) & $-$0.026 ($-$0.035, $-$0.016) & $-$0.023 ($-$0.039, $-$0.007) & --\\
+A1 vs B1: $\Delta$G1 recall & +0.102 (0.029, 0.183) & +0.056 (0.017, 0.097) & +0.130 (0.000, 0.304) & --\\
+\bottomrule
+\end{tabular}
+\end{table}
+The quality gate agreed with the EyeQ reference on 91.7\% of 641 internal test images and found 86.0\% of \emph{reject} images with a precision of 93.2\%. It rejected 5.9--15.2\% of the images (Table~\ref{tab:abl}). Removing the gate (A1) changed AUC, sensitivity and specificity by less than 0.01 on every set, so in this experiment the gate did not improve accuracy on the images it accepted. Its rejections were, however, strongly related to severity: on the internal test set it rejected 14\% of grade-0 images but 33\% of grade-3 and 52\% of grade-4 images, reproducing the pattern of the reference labels (Fig.~\ref{fig:data}d). Because the plain cross-entropy (A2) and 448-pixel (A3) runs could not be completed in the time available, the contribution of the loss is inferred only indirectly: the higher grade-1 recall of P comes with a lower specificity at an equal validation sensitivity, which is the behaviour expected from class re-weighting. The limit set by resolution is shown directly by the audit: at 224 pixels half of all microaneurysms are smaller than one pixel.
+\section{Conclusion}\label{sec:conc}
+This study set out to build a lesion-aware system for the early detection of diabetic retinopathy and to test it honestly on external data. The lesion-aware system detected more mild cases than the global-pooling baseline, significantly so on the internal and APTOS sets, but it did so by operating at a lower specificity, and its discrimination, measured by AUC, was slightly worse. On the external sets from India and China its sensitivity stayed above 0.90, yet specificity and the positive predictive value at a 10\% prevalence remained far below clinical targets. Neither the built-in attention nor Grad-CAM pointed to annotated lesions more often than a random point, so neither can be offered to graders as an explanation. The quality gate itself was accurate, but it did not change accuracy on the images it accepted, and it rejected severe and proliferative images much more often than healthy ones.
+
+The practical significance lies mainly in the audit. Public test sets contain duplicated images with conflicting grades, including a leak across the official IDRiD split, so results on them must be preceded by de-duplication. At the 224-pixel resolution used by most models, half of all microaneurysms are smaller than one pixel; a model at this resolution cannot see the lesion that defines the earliest stage, and improvements of the classifier head cannot compensate. Because poor image quality is concentrated in proliferative disease, a quality gate in a screening pathway must route rejected images to referral and never report them as negative.
+
+The study has clear limitations. It was run on two CPU cores: the planned retinal foundation model was replaced by a partially fine-tuned EfficientNet-B0, only one training seed and five epochs were possible, and the ablations of the loss and of a higher input resolution were not run. Messidor-2 with its adjudicated grades and the graded part of DDR were not available, the EyePACS reference standard is noisy at the grade~0/1 boundary, and no clinical data or local images from Kazakhstan were included. The results are therefore a lower bound for the approach rather than a test of its full form.
+
+Future work follows from these findings: training at 448 pixels or higher, or with lesion-centred crops, to keep microaneurysms visible; replacing the backbone with a retinal foundation model while excluding its EyePACS pretraining images from internal testing; running five or more seeds for every ablation; evaluating on Messidor-2 and on a local cohort under ethics approval; and supervising or calibrating the attention maps with the available lesion masks so that their localisation can exceed chance.
+\section*{Data Availability}
+All data analysed in this study are public and were not modified except for the preprocessing described in Section~\ref{sec:mm}. EyePACS images and grades are available from the Kaggle Diabetic Retinopathy Detection competition (\url{https://www.kaggle.com/c/diabetic-retinopathy-detection}) under the Kaggle competition rules; the EyeQ quality labels are available at \url{https://github.com/hzfu/EyeQ}. APTOS~2019 is available from \url{https://www.kaggle.com/c/aptos2019-blindness-detection} under the competition rules. IDRiD is available from IEEE DataPort (\url{https://doi.org/10.21227/H25W98}) under a CC BY 4.0 licence. The DDR lesion-segmentation subset is available from \url{https://github.com/nkicsl/DDR-dataset} under a CC BY-NC-SA 4.0 licence. Redistribution of the images is governed by these licences; therefore only derived data are shared: the list of the 12{,}000 EyePACS images used, the patient-level split, the duplicate pairs and exclusion flags for APTOS and IDRiD, the per-image quality statistics and all model predictions are included in the code repository below. No new patient data were collected, so no ethics approval was required.
+
+\section*{Code Availability}
+All code for preprocessing, the data audit, training, evaluation and figures is available at \url{https://github.com/sagdiko/dr-early-detection} (release v1.0) under the MIT licence. The experiments were run in Python 3.13 with PyTorch 2.15 (CPU), efficientnet-pytorch 0.7.1 with the public ImageNet weights of EfficientNet-B0, NumPy 2.5, SciPy, scikit-learn 1.9, pandas 3.0, Pillow and Matplotlib 3.11; exact versions are pinned in \texttt{requirements.txt}. Scripts \texttt{prep.py}, \texttt{hash2.py}, \texttt{meta.py}, \texttt{lesion\_stats.py}, \texttt{extract.py}, \texttt{train.py} and \texttt{evaluate.py} reproduce every number and figure in order; seed 0 fixes shuffling and initialisation, and the bootstrap uses seed 12345. No proprietary software was used. All runs took place on a 2-core CPU without a GPU (about 4--6 minutes per training run after feature caching).
+
+\section*{Declaration of AI use}
+An AI assistant (Claude, Anthropic) was used to assist in writing the code and to edit and detect language mistakes in the manuscript.
+
+\footnotesize
+\begin{thebibliography}{99}\setlength{\itemsep}{0pt}
+\bibitem{idf2025} International Diabetes Federation. IDF Diabetes Atlas, 11th edn. Brussels: IDF; 2025. \url{https://diabetesatlas.org}
+\bibitem{teo2021} Teo ZL, Tham YC, Yu M, et al. Global prevalence of diabetic retinopathy and projection of burden through 2045: systematic review and meta-analysis. Ophthalmology. 2021;128(11):1580--1591.
+\bibitem{wilkinson2003} Wilkinson CP, Ferris FL, Klein RE, et al. Proposed international clinical diabetic retinopathy and diabetic macular edema disease severity scales. Ophthalmology. 2003;110(9):1677--1682.
+\bibitem{gulshan2016} Gulshan V, Peng L, Coram M, et al. Development and validation of a deep learning algorithm for detection of diabetic retinopathy in retinal fundus photographs. JAMA. 2016;316(22):2402--2410.
+\bibitem{ting2017} Ting DSW, Cheung CYL, Lim G, et al. Development and validation of a deep learning system for diabetic retinopathy and related eye diseases using retinal images from multiethnic populations with diabetes. JAMA. 2017;318(22):2211--2223.
+\bibitem{abramoff2018} Abr\`amoff MD, Lavin PT, Birch M, Shah N, Folk JC. Pivotal trial of an autonomous AI-based diagnostic system for detection of diabetic retinopathy in primary care offices. npj Digit Med. 2018;1:39.
+\bibitem{ipp2021} Ipp E, Liljenquist D, Bode B, et al. Pivotal evaluation of an artificial intelligence system for autonomous detection of referrable and vision-threatening diabetic retinopathy. JAMA Netw Open. 2021;4(11):e2134254.
+\bibitem{ruamviboonsuk2022} Ruamviboonsuk P, Tiwari R, Sayres R, et al. Real-time diabetic retinopathy screening by deep learning in a multisite national screening programme: a prospective interventional cohort study. Lancet Digit Health. 2022;4(4):e235--e244.
+\bibitem{lee2021} Lee AY, Yanagihara RT, Lee CS, et al. Multicenter, head-to-head, real-world validation study of seven automated artificial intelligence diabetic retinopathy screening systems. Diabetes Care. 2021;44(5):1168--1175.
+\bibitem{krause2018} Krause J, Gulshan V, Rahimy E, et al. Grader variability and the importance of reference standards for evaluating machine learning models for diabetic retinopathy. Ophthalmology. 2018;125(8):1264--1272.
+\bibitem{wewetzer2021} Wewetzer L, Held LA, Steinh\"auser J. Diagnostic performance of deep-learning-based screening methods for diabetic retinopathy in primary care: a meta-analysis. PLoS ONE. 2021;16(8):e0255034.
+\bibitem{wang2026} Wang TW, et al. Systematic review and meta-analysis of regulator-approved deep learning systems for fundus diabetic retinopathy detections. npj Digit Med. 2026;9:110.
+\bibitem{kapoor2023} Kapoor S, Narayanan A. Leakage and the reproducibility crisis in machine-learning-based science. Patterns. 2023;4(9):100804.
+\bibitem{varoquaux2022} Varoquaux G, Cheplygina V. Machine learning for medical imaging: methodological failures and recommendations for the future. npj Digit Med. 2022;5:48.
+\bibitem{collins2024} Collins GS, Moons KGM, Dhiman P, et al. TRIPOD+AI statement: updated guidance for reporting clinical prediction models that use regression or machine learning methods. BMJ. 2024;385:e078378.
+\bibitem{dai2021} Dai L, Wu L, Li H, et al. A deep learning system for detecting diabetic retinopathy across the disease spectrum. Nat Commun. 2021;12:3242.
+\bibitem{sayres2019} Sayres R, Taly A, Rahimy E, et al. Using a deep learning algorithm and integrated gradients explanation to assist grading for diabetic retinopathy. Ophthalmology. 2019;126(4):552--564.
+\bibitem{he2021} He A, Li T, Li N, Wang K, Fu H. CABNet: category attention block for imbalanced diabetic retinopathy grading. IEEE Trans Med Imaging. 2021;40(1):143--153.
+\bibitem{ma2024} Ma H, Zang F. CRA-Net: transformer guided category-relation attention network for diabetic retinopathy grading. Comput Biol Med. 2024;170:107993.
+\bibitem{zhou2023} Zhou Y, Chia MA, Wagner SK, et al. A foundation model for generalizable disease detection from retinal images. Nature. 2023;622:156--163.
+\bibitem{dai2024} Dai L, Sheng B, Chen T, et al. A deep learning system for predicting time to progression of diabetic retinopathy. Nat Med. 2024;30:584--594.
+\bibitem{tsiknakis2021} Tsiknakis N, Theodoropoulos D, Manikis G, et al. Deep learning for diabetic retinopathy detection and classification based on fundus images: a review. Comput Biol Med. 2021;135:104599.
+\bibitem{bhulakshmi2024} Bhulakshmi D, Rajput DS. A systematic review on diabetic retinopathy detection and classification based on deep learning techniques using fundus images. PeerJ Comput Sci. 2024;10:e1947.
+\bibitem{qin2026} Qin G, et al. Multimodal deep learning for diabetic retinopathy: a survey. J Ophthalmol. 2026;2026:4612172.
+\bibitem{tan2019} Tan M, Le QV. EfficientNet: rethinking model scaling for convolutional neural networks. Proc Mach Learn Res. 2019;97:6105--6114.
+\bibitem{cuadros2009} Cuadros J, Bresnick G. EyePACS: an adaptable telemedicine system for diabetic retinopathy screening. J Diabetes Sci Technol. 2009;3(3):509--516.
+\bibitem{fu2019} Fu H, Wang B, Shen J, et al. Evaluation of retinal image quality assessment networks in different color-spaces. In: MICCAI 2019, LNCS 11764. Springer; 2019:48--56.
+\bibitem{aptos2019} Asia Pacific Tele-Ophthalmology Society. APTOS 2019 Blindness Detection [dataset]. Kaggle; 2019. \url{https://www.kaggle.com/c/aptos2019-blindness-detection}
+\bibitem{porwal2018} Porwal P, Pachade S, Kamble R, et al. Indian Diabetic Retinopathy Image Dataset (IDRiD): a database for diabetic retinopathy screening research. Data. 2018;3(3):25.
+\bibitem{li2019} Li T, Gao Y, Wang K, Guo S, Liu H, Kang H. Diagnostic assessment of deep learning algorithms for diabetic retinopathy screening. Inf Sci. 2019;501:511--522.
+\bibitem{lin2020} Lin TY, Goyal P, Girshick R, He K, Doll\'ar P. Focal loss for dense object detection. IEEE Trans Pattern Anal Mach Intell. 2020;42(2):318--327.
+\bibitem{selvaraju2020} Selvaraju RR, Cogswell M, Das A, et al. Grad-CAM: visual explanations from deep networks via gradient-based localization. Int J Comput Vis. 2020;128:336--359.
+\bibitem{zhang2018} Zhang J, Bargal SA, Lin Z, et al. Top-down neural attention by excitation backprop. Int J Comput Vis. 2018;126:1084--1102.
+\bibitem{efron1993} Efron B, Tibshirani RJ. An Introduction to the Bootstrap. New York: Chapman \& Hall/CRC; 1993.
+\bibitem{delong1988} DeLong ER, DeLong DM, Clarke-Pearson DL. Comparing the areas under two or more correlated receiver operating characteristic curves: a nonparametric approach. Biometrics. 1988;44(3):837--845.
+\end{thebibliography}
+\end{document}

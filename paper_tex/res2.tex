@@ -1,0 +1,54 @@
+\subsection{Detection of any DR and of grade 1 on internal and external data}
+Table~\ref{tab:main} gives the main results and Fig.~\ref{fig:roc} the ROC curves. At the threshold fixed on validation data, the proposed system P reached a sensitivity of 0.909 on the internal test set and 0.965--0.976 on the three external sets, and it flagged 84--91\% of grade-1 images, compared with 71--85\% for the baseline B1. The grade-1 gain was significant on the internal set (+0.102, 95\% CI 0.023 to 0.188) and on APTOS (+0.063, 0.018 to 0.108) and borderline on IDRiD, where only 23 grade-1 images remain (+0.130, 0.000 to 0.278). The gain was not free: specificity of P was 0.10--0.21 lower than that of B1 on every set (all McNemar $p<0.001$), and its AUC was 0.017--0.026 lower (DeLong $p=0.086$ internally, $p<0.003$ on APTOS and IDRiD). P therefore did not discriminate better than B1; it moved to a more sensitive operating point. Grading agreement was moderate ($\kappa_w$ 0.39--0.73) and did not differ significantly between the models.
+
+Performance was higher on the external sets than internally (AUC 0.87--0.92 vs.\ 0.71--0.73). This does not indicate better generalisation: the external sets contain far more moderate and severe disease (Table~\ref{tab:data}), whereas the EyePACS internal set is dominated by the noisy grade~0/1 boundary \cite{krause2018}. Specificity, however, fell sharply on external data for both models, and the PPV at $\pi=0.10$ was only 0.12--0.16, well below the value of about one half reported for deployed systems \cite{wewetzer2021}. Measured against the targets set in advance, the system thus achieved the required sensitivity but not a specificity close to 0.90 or a $\kappa_w$ of 0.80, and its advantage for grade~1 was real on two of three sets but was bought with specificity rather than with better discrimination.
+
+\begin{table}[t]
+\centering\scriptsize
+\caption{Main results at the threshold fixed on validation data (validation Se $\geq$ 0.90), with 95\% bootstrap CIs. P is evaluated on images accepted by the quality gate ($n$), B1 on all analysed images. $\Delta$: paired difference P$-$B1 on images graded by both, with 95\% CI; bold: CI excludes zero.}\label{tab:main}
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}llrcccccc@{}}
+\toprule
+Test set & Model & $n$ & AUC & Se & Sp & PPV$_{0.10}$ & G1 recall & $\kappa_w$\\\midrule
+\multirow{3}{*}{EyePACS (int.)} & B1 & 1{,}800 & 0.731 (0.694--0.766) & 0.857 & 0.324 & 0.123 & 0.713 (0.61--0.80) & 0.426\\
+ & P & 1{,}527 & 0.714 (0.676--0.749) & 0.909 & 0.223 & 0.115 & 0.837 (0.75--0.90) & 0.388\\
+ & $\Delta$ & & $-$0.019 & \textbf{+0.054} & \textbf{$-$0.097} & & \textbf{+0.102} & $-$0.047\\\midrule
+\multirow{3}{*}{APTOS (ext.)} & B1 & 3{,}486 & 0.889 (0.877--0.900) & 0.949 & 0.348 & 0.139 & 0.852 (0.81--0.89) & 0.635\\
+ & P & 3{,}066 & 0.869 (0.856--0.883) & 0.965 & 0.180 & 0.116 & 0.904 (0.87--0.94) & 0.652\\
+ & $\Delta$ & & \textbf{$-$0.017} & \textbf{+0.021} & \textbf{$-$0.162} & & \textbf{+0.063} & $-$0.025\\\midrule
+\multirow{3}{*}{IDRiD (ext.)} & B1 & 507 & 0.922 (0.898--0.944) & 0.953 & 0.449 & 0.161 & 0.783 (0.60--0.95) & 0.713\\
+ & P & 474 & 0.894 (0.867--0.920) & 0.971 & 0.238 & 0.124 & 0.913 (0.79--1.00) & 0.732\\
+ & $\Delta$ & & \textbf{$-$0.026} & +0.019 & \textbf{$-$0.213} & & +0.130 & +0.027\\\midrule
+DDR (ext.) & B1 / P & 757 / 712 & -- & 0.960 / 0.976 & -- & -- & -- & --\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering\includegraphics[width=\textwidth]{../figs/fig3_roc.pdf}
+\caption{ROC curves for any DR. Dots: operating points at the validation-fixed threshold; shaded square: target region (Se $\geq$ 0.90, Sp $\geq$ 0.90).}\label{fig:roc}
+\end{figure}
+
+\subsection{Lesion localisation}
+On the 757 DDR images, the maximum of the attention map of P fell within one patch of an annotated lesion in 23.0\% of images (95\% CI 19.9--25.9\%) and the maximum of the Grad-CAM map of B1 in 21.9\% (19.0--25.0\%); the paired difference was +1.1 points ($-$2.8 to +4.9). For microaneurysms (570 images) the scores were 12.3\% and 13.5\%. Both are \emph{below} the chance baseline of a random point inside the field of view (34.3\% for all lesions, 19.6\% for MAs). Inspection (Fig.~\ref{fig:heat}) shows that both maps peak most often on the optic disc or on large bright regions. The built-in attention therefore offered no localisation advantage over Grad-CAM, and neither map should be shown to graders as a lesion explanation.
+
+\begin{figure}[t]
+\centering\includegraphics[width=0.72\textwidth]{../figs/fig4_heatmaps.pdf}
+\caption{DDR test images with lesion masks (outlines), Grad-CAM of B1 and the lesion attention of P (maximum over queries). Crosses mark the map maximum used in the pointing game.}\label{fig:heat}
+\end{figure}
+
+\subsection{Quality gate, loss and resolution}
+\begin{table}[t]
+\centering\scriptsize
+\caption{Quality gate and component analysis (seed 0). Rejection: share of analysed images classified as \emph{reject}. A1: P without gate (all images); $\Delta$AUC and $\Delta$G1: difference to B1 on all images with 95\% CI.}\label{tab:abl}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+ & EyePACS (int.) & APTOS & IDRiD & DDR\\\midrule
+Gate rejection rate & 15.2\% & 12.0\% & 6.5\% & 5.9\%\\
+A1: AUC / Se / Sp & 0.715 / 0.904 / 0.228 & 0.863 / 0.962 / 0.185 & 0.899 / 0.971 / 0.234 & -- / 0.978 / --\\
+A1 vs B1: $\Delta$AUC & $-$0.016 ($-$0.035, 0.005) & $-$0.026 ($-$0.035, $-$0.016) & $-$0.023 ($-$0.039, $-$0.007) & --\\
+A1 vs B1: $\Delta$G1 recall & +0.102 (0.029, 0.183) & +0.056 (0.017, 0.097) & +0.130 (0.000, 0.304) & --\\
+\bottomrule
+\end{tabular}
+\end{table}
+The quality gate agreed with the EyeQ reference on 91.7\% of 641 internal test images and found 86.0\% of \emph{reject} images with a precision of 93.2\%. It rejected 5.9--15.2\% of the images (Table~\ref{tab:abl}). Removing the gate (A1) changed AUC, sensitivity and specificity by less than 0.01 on every set, so in this experiment the gate did not improve accuracy on the images it accepted. Its rejections were, however, strongly related to severity: on the internal test set it rejected 14\% of grade-0 images but 33\% of grade-3 and 52\% of grade-4 images, reproducing the pattern of the reference labels (Fig.~\ref{fig:data}d). Because the plain cross-entropy (A2) and 448-pixel (A3) runs could not be completed in the time available, the contribution of the loss is inferred only indirectly: the higher grade-1 recall of P comes with a lower specificity at an equal validation sensitivity, which is the behaviour expected from class re-weighting. The limit set by resolution is shown directly by the audit: at 224 pixels half of all microaneurysms are smaller than one pixel.

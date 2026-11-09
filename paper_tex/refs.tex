@@ -1,0 +1,48 @@
+\section*{Data Availability}
+All data analysed in this study are public and were not modified except for the preprocessing described in Section~\ref{sec:mm}. EyePACS images and grades are available from the Kaggle Diabetic Retinopathy Detection competition (\url{https://www.kaggle.com/c/diabetic-retinopathy-detection}) under the Kaggle competition rules; the EyeQ quality labels are available at \url{https://github.com/hzfu/EyeQ}. APTOS~2019 is available from \url{https://www.kaggle.com/c/aptos2019-blindness-detection} under the competition rules. IDRiD is available from IEEE DataPort (\url{https://doi.org/10.21227/H25W98}) under a CC BY 4.0 licence. The DDR lesion-segmentation subset is available from \url{https://github.com/nkicsl/DDR-dataset} under a CC BY-NC-SA 4.0 licence. Redistribution of the images is governed by these licences; therefore only derived data are shared: the list of the 12{,}000 EyePACS images used, the patient-level split, the duplicate pairs and exclusion flags for APTOS and IDRiD, the per-image quality statistics and all model predictions are included in the code repository below. No new patient data were collected, so no ethics approval was required.
+
+\section*{Code Availability}
+All code for preprocessing, the data audit, training, evaluation and figures is available at \url{https://github.com/sagdiko/dr-early-detection} (release v1.0) under the MIT licence. The experiments were run in Python 3.13 with PyTorch 2.15 (CPU), efficientnet-pytorch 0.7.1 with the public ImageNet weights of EfficientNet-B0, NumPy 2.5, SciPy, scikit-learn 1.9, pandas 3.0, Pillow and Matplotlib 3.11; exact versions are pinned in \texttt{requirements.txt}. Scripts \texttt{prep.py}, \texttt{hash2.py}, \texttt{meta.py}, \texttt{lesion\_stats.py}, \texttt{extract.py}, \texttt{train.py} and \texttt{evaluate.py} reproduce every number and figure in order; seed 0 fixes shuffling and initialisation, and the bootstrap uses seed 12345. No proprietary software was used. All runs took place on a 2-core CPU without a GPU (about 4--6 minutes per training run after feature caching).
+
+\section*{Declaration of AI use}
+An AI assistant (Claude, Anthropic) was used to assist in writing the code and to edit and detect language mistakes in the manuscript.
+
+\footnotesize
+\begin{thebibliography}{99}\setlength{\itemsep}{0pt}
+\bibitem{idf2025} International Diabetes Federation. IDF Diabetes Atlas, 11th edn. Brussels: IDF; 2025. \url{https://diabetesatlas.org}
+\bibitem{teo2021} Teo ZL, Tham YC, Yu M, et al. Global prevalence of diabetic retinopathy and projection of burden through 2045: systematic review and meta-analysis. Ophthalmology. 2021;128(11):1580--1591.
+\bibitem{wilkinson2003} Wilkinson CP, Ferris FL, Klein RE, et al. Proposed international clinical diabetic retinopathy and diabetic macular edema disease severity scales. Ophthalmology. 2003;110(9):1677--1682.
+\bibitem{gulshan2016} Gulshan V, Peng L, Coram M, et al. Development and validation of a deep learning algorithm for detection of diabetic retinopathy in retinal fundus photographs. JAMA. 2016;316(22):2402--2410.
+\bibitem{ting2017} Ting DSW, Cheung CYL, Lim G, et al. Development and validation of a deep learning system for diabetic retinopathy and related eye diseases using retinal images from multiethnic populations with diabetes. JAMA. 2017;318(22):2211--2223.
+\bibitem{abramoff2018} Abr\`amoff MD, Lavin PT, Birch M, Shah N, Folk JC. Pivotal trial of an autonomous AI-based diagnostic system for detection of diabetic retinopathy in primary care offices. npj Digit Med. 2018;1:39.
+\bibitem{ipp2021} Ipp E, Liljenquist D, Bode B, et al. Pivotal evaluation of an artificial intelligence system for autonomous detection of referrable and vision-threatening diabetic retinopathy. JAMA Netw Open. 2021;4(11):e2134254.
+\bibitem{ruamviboonsuk2022} Ruamviboonsuk P, Tiwari R, Sayres R, et al. Real-time diabetic retinopathy screening by deep learning in a multisite national screening programme: a prospective interventional cohort study. Lancet Digit Health. 2022;4(4):e235--e244.
+\bibitem{lee2021} Lee AY, Yanagihara RT, Lee CS, et al. Multicenter, head-to-head, real-world validation study of seven automated artificial intelligence diabetic retinopathy screening systems. Diabetes Care. 2021;44(5):1168--1175.
+\bibitem{krause2018} Krause J, Gulshan V, Rahimy E, et al. Grader variability and the importance of reference standards for evaluating machine learning models for diabetic retinopathy. Ophthalmology. 2018;125(8):1264--1272.
+\bibitem{wewetzer2021} Wewetzer L, Held LA, Steinh\"auser J. Diagnostic performance of deep-learning-based screening methods for diabetic retinopathy in primary care: a meta-analysis. PLoS ONE. 2021;16(8):e0255034.
+\bibitem{wang2026} Wang TW, et al. Systematic review and meta-analysis of regulator-approved deep learning systems for fundus diabetic retinopathy detections. npj Digit Med. 2026;9:110.
+\bibitem{kapoor2023} Kapoor S, Narayanan A. Leakage and the reproducibility crisis in machine-learning-based science. Patterns. 2023;4(9):100804.
+\bibitem{varoquaux2022} Varoquaux G, Cheplygina V. Machine learning for medical imaging: methodological failures and recommendations for the future. npj Digit Med. 2022;5:48.
+\bibitem{collins2024} Collins GS, Moons KGM, Dhiman P, et al. TRIPOD+AI statement: updated guidance for reporting clinical prediction models that use regression or machine learning methods. BMJ. 2024;385:e078378.
+\bibitem{dai2021} Dai L, Wu L, Li H, et al. A deep learning system for detecting diabetic retinopathy across the disease spectrum. Nat Commun. 2021;12:3242.
+\bibitem{sayres2019} Sayres R, Taly A, Rahimy E, et al. Using a deep learning algorithm and integrated gradients explanation to assist grading for diabetic retinopathy. Ophthalmology. 2019;126(4):552--564.
+\bibitem{he2021} He A, Li T, Li N, Wang K, Fu H. CABNet: category attention block for imbalanced diabetic retinopathy grading. IEEE Trans Med Imaging. 2021;40(1):143--153.
+\bibitem{ma2024} Ma H, Zang F. CRA-Net: transformer guided category-relation attention network for diabetic retinopathy grading. Comput Biol Med. 2024;170:107993.
+\bibitem{zhou2023} Zhou Y, Chia MA, Wagner SK, et al. A foundation model for generalizable disease detection from retinal images. Nature. 2023;622:156--163.
+\bibitem{dai2024} Dai L, Sheng B, Chen T, et al. A deep learning system for predicting time to progression of diabetic retinopathy. Nat Med. 2024;30:584--594.
+\bibitem{tsiknakis2021} Tsiknakis N, Theodoropoulos D, Manikis G, et al. Deep learning for diabetic retinopathy detection and classification based on fundus images: a review. Comput Biol Med. 2021;135:104599.
+\bibitem{bhulakshmi2024} Bhulakshmi D, Rajput DS. A systematic review on diabetic retinopathy detection and classification based on deep learning techniques using fundus images. PeerJ Comput Sci. 2024;10:e1947.
+\bibitem{qin2026} Qin G, et al. Multimodal deep learning for diabetic retinopathy: a survey. J Ophthalmol. 2026;2026:4612172.
+\bibitem{tan2019} Tan M, Le QV. EfficientNet: rethinking model scaling for convolutional neural networks. Proc Mach Learn Res. 2019;97:6105--6114.
+\bibitem{cuadros2009} Cuadros J, Bresnick G. EyePACS: an adaptable telemedicine system for diabetic retinopathy screening. J Diabetes Sci Technol. 2009;3(3):509--516.
+\bibitem{fu2019} Fu H, Wang B, Shen J, et al. Evaluation of retinal image quality assessment networks in different color-spaces. In: MICCAI 2019, LNCS 11764. Springer; 2019:48--56.
+\bibitem{aptos2019} Asia Pacific Tele-Ophthalmology Society. APTOS 2019 Blindness Detection [dataset]. Kaggle; 2019. \url{https://www.kaggle.com/c/aptos2019-blindness-detection}
+\bibitem{porwal2018} Porwal P, Pachade S, Kamble R, et al. Indian Diabetic Retinopathy Image Dataset (IDRiD): a database for diabetic retinopathy screening research. Data. 2018;3(3):25.
+\bibitem{li2019} Li T, Gao Y, Wang K, Guo S, Liu H, Kang H. Diagnostic assessment of deep learning algorithms for diabetic retinopathy screening. Inf Sci. 2019;501:511--522.
+\bibitem{lin2020} Lin TY, Goyal P, Girshick R, He K, Doll\'ar P. Focal loss for dense object detection. IEEE Trans Pattern Anal Mach Intell. 2020;42(2):318--327.
+\bibitem{selvaraju2020} Selvaraju RR, Cogswell M, Das A, et al. Grad-CAM: visual explanations from deep networks via gradient-based localization. Int J Comput Vis. 2020;128:336--359.
+\bibitem{zhang2018} Zhang J, Bargal SA, Lin Z, et al. Top-down neural attention by excitation backprop. Int J Comput Vis. 2018;126:1084--1102.
+\bibitem{efron1993} Efron B, Tibshirani RJ. An Introduction to the Bootstrap. New York: Chapman \& Hall/CRC; 1993.
+\bibitem{delong1988} DeLong ER, DeLong DM, Clarke-Pearson DL. Comparing the areas under two or more correlated receiver operating characteristic curves: a nonparametric approach. Biometrics. 1988;44(3):837--845.
+\end{thebibliography}
+\end{document}

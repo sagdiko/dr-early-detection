@@ -1,0 +1,37 @@
+\section{Results}\label{sec:res}
+\subsection{Data audit}
+Table~\ref{tab:data} lists the data and exclusions, and Fig.~\ref{fig:ex} shows examples of each stage of the disease. The audit produced four findings that change how results on these datasets must be read.
+
+\begin{table}[t]
+\centering\scriptsize\setlength{\tabcolsep}{3pt}
+\caption{Data used in the experiments. Distr.: images in the release; Analysed: after exclusions; Any DR and G1: share of grade~$\geq$1 and grade~1 among analysed images. Duplicates: pairs at $\leq$10 bits of the vessel hash (pairs with conflicting grades).}\label{tab:data}
+\begin{tabular}{@{}llrlrrrl@{}}
+\toprule
+Dataset & Origin, camera & Distr. & Excluded (reason) & Analysed & Any DR & G1 & Role\\\midrule
+EyePACS subset \cite{cuadros2009} & USA, various & 12{,}000 & 2 (no detectable FOV) & 11{,}998 & 26.5\% & 7.0\% & Development\\
+\quad train / val / test & \multicolumn{3}{l}{4{,}200 / 900 / 900 patients, split by patient} & \multicolumn{3}{l}{8{,}398 / 1{,}800 / 1{,}800} & \\
+EyeQ labels \cite{fu2019} & USA (EyePACS) & 12{,}543 & non-training patients & 3{,}004 & -- & -- & Quality gate\\
+APTOS 2019 \cite{aptos2019} & India, various & 3{,}662 & 176 (148 dup.\ pairs, 43 conflicting) & 3{,}486 & 48.5\% & 9.7\% & External test\\
+IDRiD \cite{porwal2018} & India, Kowa & 516 & 9 (6 dup.\ pairs, 3 conflicting) & 507 & 67.1\% & 4.5\% & External test\\
+DDR lesion set \cite{li2019} & China, various & 757 & 0 & 757 & 100\% & -- & Sensitivity, lesions\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering\includegraphics[width=\textwidth]{../figs/fig1_examples.pdf}
+\caption{Fundus photographs from IDRiD (CC BY 4.0) at the four main ICDR stages (a--d) and a DDR crop with annotated microaneurysms (e) together with the same crop at the resolution of a 224-pixel model input (f), where the 300-pixel crop occupies about 19 pixels and the microaneurysms are no longer visible.}\label{fig:ex}
+\end{figure}
+
+\begin{figure}[t]
+\centering\includegraphics[width=\textwidth]{../figs/fig2_data.pdf}
+\caption{Data audit. (a) Grade distributions; numbers give the grade-1 share. (b) RMS contrast inside the field of view differs between sources (Kruskal--Wallis $H=3407$, $p<0.001$). (c) Equivalent diameter of the 10{,}380 annotated DDR microaneurysms after resizing to the model input; dashed line: 1 pixel. (d) EyeQ quality labels of 12{,}543 EyePACS images by DR grade ($\chi^2=500$, $p<10^{-100}$).}\label{fig:data}
+\end{figure}
+
+\emph{Duplicates with conflicting labels.} APTOS contains 148 duplicate pairs, 140 of them pixel-identical after preprocessing, and 43 of these pairs carry different grades. IDRiD contains 6 duplicate pairs, 3 with different grades; one pair crosses the official train/test split and is graded 0 in the training part and 3 in the test part. No duplicates were found between datasets. Without this audit, a model trained on the official IDRiD training part would be tested on an image it had seen, and the conflicting pairs would cap the attainable accuracy.
+
+\emph{Acquisition shift.} Brightness, contrast and sharpness differ between all sources (Fig.~\ref{fig:data}b); the median contrast is 23.5 grey levels in EyePACS but 15.1 in APTOS, which is the expected direction of a domain shift for a model developed on EyePACS. Prevalence also differs strongly (any DR 26.5\% to 67.1\%, grade~1 4.5\% to 9.7\%), so prevalence-dependent metrics are reported at a common $\pi=0.10$.
+
+\emph{Microaneurysms vanish at standard resolution.} The median MA in DDR is 7.8 pixels wide in the native image but 1.0 pixel at a 224-pixel input; 49\% of all MAs fall below one pixel and 94\% below two pixels (Fig.~\ref{fig:data}c, Fig.~\ref{fig:ex}f). At 448 pixels only 9\% fall below one pixel. Grade~1, which is defined by MAs alone, is therefore close to invisible to any model at 224 pixels, whatever its head.
+
+\emph{Quality rejection depends on severity.} In EyeQ, 16.7\% of grade-0 images but 61.4\% of PDR images are labelled \emph{reject} (Fig.~\ref{fig:data}d). A quality gate that excludes rejected images from grading therefore removes the most severe cases disproportionately; in a screening pathway these images must be referred, never reported as negative.
